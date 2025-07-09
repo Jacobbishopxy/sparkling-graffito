@@ -14,22 +14,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 function(read_env_file env_file)
     file(STRINGS ${env_file} env_lines)
     foreach(line IN LISTS env_lines)
-        # Skip comments and empty lines
         if(NOT line MATCHES "^#" AND line MATCHES "=")
-            # Split into key and value
             string(REGEX REPLACE "=.*" "" key ${line})
             string(REGEX REPLACE "^[^=]*=" "" value ${line})
-
-            # Remove surrounding quotes if present
             string(REGEX REPLACE "^[\"'](.*)[\"']$" "\\1" value ${value})
-
-            # Set as CMake variable
             set(${key} ${value} PARENT_SCOPE)
         endif()
     endforeach()
 endfunction()
 
-# Usage
 if(EXISTS "${CMAKE_SOURCE_DIR}/.env")
     read_env_file("${CMAKE_SOURCE_DIR}/.env")
 endif()
@@ -37,44 +30,59 @@ endif()
 ###################################################################################################
 
 set(PROJECT_VERSION ${PROJ_VER})
-
 project(SparklingGraffito VERSION ${PROJECT_VERSION} LANGUAGES CXX)
+set(PROJ_PREFIX "/opt/${PROJECT_NAME}-${PROJECT_VERSION}")
 
-set(PROJ_PREFIX "/opt/SparklingGraffito-${PROJECT_VERSION}")
+include_directories(${CMAKE_SOURCE_DIR}/include)
 
-add_library(SparklingGraffito STATIC
+###################################################################################################
+
+set(LIBZMQ_VERSION 4.3.5)
+find_package(ZeroMQ REQUIRED PATHS "/opt/libzmq-${LIBZMQ_VERSION}" NO_DEFAULT_PATH)
+message(STATUS "Found ZeroMQ: ${ZeroMQ_DIR}")
+set(ZMQ_VERSION 4.11.0)
+find_package(cppzmq REQUIRED PATHS "/opt/cppzmq-${ZMQ_VERSION}" NO_DEFAULT_PATH)
+message(STATUS "Found cppzmq: ${cppzmq_DIR}")
+
+###################################################################################################
+
+add_library(${PROJECT_NAME} STATIC
     src/Graffito.cpp
 )
 
-target_include_directories(SparklingGraffito
+target_link_libraries(${PROJECT_NAME} PRIVATE cppzmq ${ZMQ_STATIC_LIBRARY})
+
+set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
+
+target_include_directories(${PROJECT_NAME}
     PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/SparklingGraffito>
-    $<INSTALL_INTERFACE:${PROJ_PREFIX}/include/SparklingGraffito>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}>
+    $<INSTALL_INTERFACE:${PROJ_PREFIX}/include/${PROJECT_NAME}>
 )
 
 ###################################################################################################
 
-install(TARGETS SparklingGraffito
-    EXPORT SparklingGraffitoTargets
+install(TARGETS ${PROJECT_NAME}
+    EXPORT ${PROJECT_NAME}Targets
     ARCHIVE DESTINATION ${PROJ_PREFIX}/lib
     LIBRARY DESTINATION ${PROJ_PREFIX}/lib
     INCLUDES DESTINATION ${PROJ_PREFIX}/include
 )
 
-install(DIRECTORY include/SparklingGraffito/
-    DESTINATION ${PROJ_PREFIX}/include/SparklingGraffito
+install(DIRECTORY include/${PROJECT_NAME}/
+    DESTINATION ${PROJ_PREFIX}/include/${PROJECT_NAME}
 )
 
 install(FILES
-    ${CMAKE_CURRENT_BINARY_DIR}/SparklingGraffitoConfig.cmake
-    ${CMAKE_CURRENT_BINARY_DIR}/SparklingGraffitoConfigVersion.cmake
-    DESTINATION ${PROJ_PREFIX}/lib/cmake/SparklingGraffito
+    ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake
+    DESTINATION ${PROJ_PREFIX}/lib/cmake/${PROJECT_NAME}
 )
 
-install(EXPORT SparklingGraffitoTargets
-    FILE SparklingGraffitoTargets.cmake
-    NAMESPACE SparklingGraffito::
-    DESTINATION ${PROJ_PREFIX}/lib/cmake/SparklingGraffito
+install(EXPORT ${PROJECT_NAME}Targets
+    FILE ${PROJECT_NAME}Targets.cmake
+    NAMESPACE ${PROJECT_NAME}::
+    DESTINATION ${PROJ_PREFIX}/lib/cmake/${PROJECT_NAME}
 )
 
 ###################################################################################################
@@ -82,13 +90,13 @@ install(EXPORT SparklingGraffitoTargets
 include(CMakePackageConfigHelpers)
 
 write_basic_package_version_file(
-    ${CMAKE_CURRENT_BINARY_DIR}/SparklingGraffitoConfigVersion.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake
     VERSION ${PROJECT_VERSION}
     COMPATIBILITY SameMajorVersion
 )
 
 configure_package_config_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/SparklingGraffitoConfig.cmake.in
-    ${CMAKE_CURRENT_BINARY_DIR}/SparklingGraffitoConfig.cmake
-    INSTALL_DESTINATION ${PROJ_PREFIX}/lib/cmake/SparklingGraffito
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/${PROJECT_NAME}Config.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake
+    INSTALL_DESTINATION ${PROJ_PREFIX}/lib/cmake
 )

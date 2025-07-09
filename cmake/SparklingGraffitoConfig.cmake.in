@@ -2,6 +2,6 @@
 
 include(CMakeFindDependencyMacro)
 
-include("${CMAKE_CURRENT_LIST_DIR}/SparklingGraffitoConfig.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/SparklingGraffitoTargets.cmake")
 
 check_required_components(SparklingGraffito)
