@@ -6,6 +6,7 @@
 cmake_minimum_required(VERSION 3.22)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 ###################################################################################################
 # env file
@@ -37,12 +38,23 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 
 ###################################################################################################
 
+# Link ZeroMQ statically
 set(LIBZMQ_VERSION 4.3.5)
-find_package(ZeroMQ REQUIRED PATHS "/opt/libzmq-${LIBZMQ_VERSION}" NO_DEFAULT_PATH)
-message(STATUS "Found ZeroMQ: ${ZeroMQ_DIR}")
+find_library(ZMQ_STATIC_LIBRARY
+    NAMES libzmq.a
+    PATHS "/opt/libzmq-${LIBZMQ_VERSION}/lib"
+    NO_DEFAULT_PATH
+    REQUIRED
+)
+
+add_library(libzmq STATIC IMPORTED)
+set_target_properties(libzmq PROPERTIES IMPORTED_LOCATION "${ZMQ_STATIC_LIBRARY}")
+
+# cppzmq is header-only
 set(ZMQ_VERSION 4.11.0)
-find_package(cppzmq REQUIRED PATHS "/opt/cppzmq-${ZMQ_VERSION}" NO_DEFAULT_PATH)
-message(STATUS "Found cppzmq: ${cppzmq_DIR}")
+add_library(cppzmq INTERFACE)
+target_include_directories(cppzmq INTERFACE "/opt/cppzmq-${ZMQ_VERSION}/include")
+install(TARGETS cppzmq EXPORT ${PROJECT_NAME}Targets)
 
 ###################################################################################################
 
@@ -50,15 +62,19 @@ add_library(${PROJECT_NAME} STATIC
     src/Graffito.cpp
 )
 
-target_link_libraries(${PROJECT_NAME} PRIVATE cppzmq ${ZMQ_STATIC_LIBRARY})
-
-set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
+find_library(BSD_LIBRARY NAMES bsd)
 
 target_include_directories(${PROJECT_NAME}
     PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}>
     $<INSTALL_INTERFACE:${PROJ_PREFIX}/include/${PROJECT_NAME}>
 )
+
+target_link_libraries(${PROJECT_NAME} PRIVATE ${ZMQ_STATIC_LIBRARY} cppzmq)
+
+# Hide all zmq symbols from public headers
+target_compile_definitions(SparklingGraffito PRIVATE ZMQ_STATIC)
+
 
 ###################################################################################################
 
