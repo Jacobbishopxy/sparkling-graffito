@@ -9,46 +9,54 @@
 #include <iostream>
 #include <thread>
 
-
 // Same types as server for compatibility
-struct BinaryRequest {
+struct BinaryRequest
+{
     int32_t id;
     double value;
 };
 
-struct BinaryResponse {
+struct BinaryResponse
+{
     int32_t status;
     double result;
 };
 
-struct TextResponse {
+struct TextResponse
+{
     std::string data;
-    TextResponse(std::string_view sv) : data(sv) {}
+
+    TextResponse(std::string_view sv)
+        : data(sv) {}
 };
 
-void run_test_client() {
-    try {
+void run_test_client()
+{
+    try
+    {
         ReqClient client("tcp://localhost:5555");
 
         // Test 1: Text request/response
         std::string text_resp = client.sendAndRecv<std::string, std::string>("Hello");
         std::cout << "Text response: " << text_resp << std::endl;
 
-        // // Test 2: Binary request/response
-        // BinaryResponse bin_resp = client.sendAndRecv<BinaryRequest, BinaryResponse>({42, 2.71828});
-        // std::cout << "Binary response: status=" << bin_resp.status
-        //           << ", result=" << bin_resp.result << std::endl;
+        // Test 2: Binary request/response
+        BinaryResponse bin_resp = client.sendAndRecv<BinaryRequest, BinaryResponse>({42, 2.71828});
+        std::cout << "Binary response: status=" << bin_resp.status
+                  << ", result=" << bin_resp.result << std::endl;
 
-        // // Test 3: Mixed types
-        // TextResponse mixed_resp = client.sendAndRecv<std::string, TextResponse>("Query");
-        // std::cout << "Mixed response: " << mixed_resp.data << std::endl;
-
-    } catch (const std::exception& e) {
+        // Test 3: Mixed types
+        TextResponse mixed_resp = client.sendAndRecv<std::string, TextResponse>("Query");
+        std::cout << "Mixed response: " << mixed_resp.data << std::endl;
+    }
+    catch (const std::exception& e)
+    {
         std::cerr << "Client error: " << e.what() << std::endl;
     }
 }
 
-int main() {
+int main()
+{
     // Wait briefly to ensure server is up
     std::this_thread::sleep_for(std::chrono::seconds(1));
 
