@@ -40,9 +40,10 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 
 # Link ZeroMQ statically
 set(LIBZMQ_VERSION 4.3.5)
+set(LIBZMQ_PATH "/opt/libzmq-${LIBZMQ_VERSION}/lib")
 find_library(ZMQ_STATIC_LIBRARY
     NAMES libzmq.a
-    PATHS "/opt/libzmq-${LIBZMQ_VERSION}/lib"
+    PATHS ${LIBZMQ_PATH}
     NO_DEFAULT_PATH
     REQUIRED
 )
@@ -52,8 +53,9 @@ set_target_properties(libzmq PROPERTIES IMPORTED_LOCATION "${ZMQ_STATIC_LIBRARY}
 
 # cppzmq is header-only
 set(ZMQ_VERSION 4.11.0)
+set(ZMQ_PATH "/opt/cppzmq-${ZMQ_VERSION}/include")
 add_library(cppzmq INTERFACE)
-target_include_directories(cppzmq INTERFACE "/opt/cppzmq-${ZMQ_VERSION}/include")
+target_include_directories(cppzmq INTERFACE ${ZMQ_PATH})
 install(TARGETS cppzmq EXPORT ${PROJECT_NAME}Targets)
 
 ###################################################################################################

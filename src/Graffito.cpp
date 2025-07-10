@@ -7,53 +7,105 @@
 
 #include "SparklingGraffito/Graffito.hpp"
 
-#include <iostream>
-#include <stdexcept>
+#include <zmq.hpp>
 
-ReqClient::ReqClient(const std::string& server_address)
-    : mZCtx(1), mReq(mZCtx, zmq::socket_type::req), mServerAddr(server_address)
+std::vector<std::byte> m2b(const zmq::message_t& msg)
 {
-    mReq.connect(mServerAddr);
+    const auto* data = static_cast<const std::byte*>(msg.data());
+    return std::vector<std::byte>(data, data + msg.size());
+}
+
+// ================================================================================================
+class ReqClient::Impl
+{
+public:
+    Impl(const std::string& address)
+        : mZCtx(1), mReq(mZCtx, ZMQ_REQ)
+    {
+        mReq.connect(address);
+    }
+
+    ~Impl() = default;
+
+    void send_impl(const Bytes& msg)
+    {
+        zmq::message_t req(msg.data(), msg.size());
+        mReq.send(req, zmq::send_flags::none);
+    }
+
+    Bytes recv_impl()
+    {
+        zmq::message_t rep;
+        auto rr = mReq.recv(rep);
+        return m2b(rep);
+    }
+
+private:
+    zmq::context_t mZCtx;
+    zmq::socket_t mReq;
 };
 
-std::string ReqClient::sendAndRecv(const std::string& message)
-{
-    zmq::message_t request(message.begin(), message.end());
-    mReq.send(request, zmq::send_flags::none);
+// ReqClient methods
+ReqClient::ReqClient(const std::string& server_address)
+    : mImpl(std::make_unique<Impl>(server_address)),
+      mServerAddr(server_address) {}
 
-    zmq::message_t reply;
-    auto recv_result = mReq.recv(reply, zmq::recv_flags::none);
-    if (!recv_result)
-    {
-        throw std::runtime_error("Failed to receive reply");
-    }
-    std::string reply_str(reply.to_string());
-    return reply_str;
+ReqClient::~ReqClient() = default;
+
+void ReqClient::send_impl(const Bytes& msg)
+{
+    mImpl->send_impl(msg);
 }
 
+Bytes ReqClient::recv_impl()
+{
+    return mImpl->recv_impl();
+}
+
+// ================================================================================================
+
+class RepServer::Impl
+{
+public:
+    Impl(const std::string& address)
+        : mZCtx(1), mRep(mZCtx, ZMQ_REP)
+    {
+        mRep.bind(address);
+    }
+
+    ~Impl() = default;
+
+    void send_impl(Bytes msg)
+    {
+        zmq::message_t req(msg.data(), msg.size());
+        mRep.send(req, zmq::send_flags::none);
+    }
+
+    Bytes recv_impl()
+    {
+        zmq::message_t req;
+        auto rr = mRep.recv(req);
+        return m2b(req);
+    }
+
+private:
+    zmq::context_t mZCtx;
+    zmq::socket_t mRep;
+};
+
+// RepServer methods
 RepServer::RepServer(const std::string& address)
-    : mZCtx(1), mRep(mZCtx, zmq::socket_type::rep), mAddr(address)
+    : mImpl(std::make_unique<Impl>(address)),
+      mAddr(address) {}
+
+RepServer::~RepServer() = default;
+
+void RepServer::send_impl(const Bytes& msg)
 {
-    mRep.bind(mAddr);
+    mImpl->send_impl(msg);
 }
 
-void RepServer::start()
+Bytes RepServer::recv_impl()
 {
-    while (true)
-    {
-        zmq::message_t request;
-        auto recv_result = mRep.recv(request, zmq::recv_flags::none);
-        if (!recv_result)
-        {
-            throw std::runtime_error("Failed to receive request");
-        }
-        std::string request_str(request.to_string());
-        std::cout << "Received request: " << request_str << std::endl;
-
-        // Prepare and send reply
-        std::string reply_str = "Reply to: " + request_str;
-        zmq::message_t reply(reply_str.begin(), reply_str.end());
-        mRep.send(reply, zmq::send_flags::none);
-        std::cout << "Sent reply: " << reply_str << std::endl;
-    }
+    return mImpl->recv_impl();
 }
