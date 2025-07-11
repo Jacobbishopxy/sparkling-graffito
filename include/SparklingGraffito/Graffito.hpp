@@ -113,7 +113,7 @@ R fromBytes(const std::vector<std::byte>& bytes)
 template <typename Drv>
 class Messenger
 {
-public:
+protected:
     void send(const Bytes& msg)
     {
         static_cast<Drv*>(this)->send_impl(msg);
@@ -133,11 +133,8 @@ class ReqClient : public Messenger<ReqClient>
     friend class Messenger<ReqClient>;
 
 public:
-    ReqClient(const std::string& server_address);
+    ReqClient(const std::string& address);
     ~ReqClient();
-
-    void send_impl(const Bytes& msg);
-    Bytes recv_impl();
 
     template <Sendable S, Receivable R>
     R sendAndRecv(const S& msg)
@@ -150,8 +147,11 @@ public:
 
 private:
     class Impl;
-    std::string mServerAddr;
     std::unique_ptr<Impl> mImpl;
+
+private:
+    void send_impl(const Bytes& msg);
+    Bytes recv_impl();
 };
 
 // ================================================================================================
@@ -165,9 +165,6 @@ public:
     RepServer(const std::string& address);
     ~RepServer();
 
-    void send_impl(const Bytes& msg);
-    Bytes recv_impl();
-
     template <Sendable S, Receivable R>
     R recvAndSend(const S& msg)
     {
@@ -179,8 +176,11 @@ public:
 
 private:
     class Impl;
-    std::string mAddr;
     std::unique_ptr<Impl> mImpl;
+
+private:
+    void send_impl(const Bytes& msg);
+    Bytes recv_impl();
 };
 
 #endif  //!__GRAFFITO__H__

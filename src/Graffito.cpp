@@ -20,7 +20,7 @@ class ReqClient::Impl
 {
 public:
     Impl(const std::string& address)
-        : mZCtx(1), mReq(mZCtx, ZMQ_REQ)
+        : mAddr(address),mZCtx(1), mReq(mZCtx, ZMQ_REQ)
     {
         mReq.connect(address);
     }
@@ -41,14 +41,14 @@ public:
     }
 
 private:
+    std::string mAddr;
     zmq::context_t mZCtx;
     zmq::socket_t mReq;
 };
 
 // ReqClient methods
 ReqClient::ReqClient(const std::string& server_address)
-    : mImpl(std::make_unique<Impl>(server_address)),
-      mServerAddr(server_address) {}
+    : mImpl(std::make_unique<Impl>(server_address)) {}
 
 ReqClient::~ReqClient() = default;
 
@@ -68,7 +68,7 @@ class RepServer::Impl
 {
 public:
     Impl(const std::string& address)
-        : mZCtx(1), mRep(mZCtx, ZMQ_REP)
+        : mAddr(address), mZCtx(1), mRep(mZCtx, ZMQ_REP)
     {
         mRep.bind(address);
     }
@@ -89,14 +89,14 @@ public:
     }
 
 private:
+    std::string mAddr;
     zmq::context_t mZCtx;
     zmq::socket_t mRep;
 };
 
 // RepServer methods
 RepServer::RepServer(const std::string& address)
-    : mImpl(std::make_unique<Impl>(address)),
-      mAddr(address) {}
+    : mImpl(std::make_unique<Impl>(address)) {}
 
 RepServer::~RepServer() = default;
 
