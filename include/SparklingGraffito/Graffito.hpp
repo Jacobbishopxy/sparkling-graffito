@@ -12,7 +12,7 @@
 #include <bit>
 #include <cstring>
 #include <memory>
-#include <string>
+#include <string_view>
 #include <vector>
 
 // ================================================================================================
@@ -89,8 +89,9 @@ T fromBytes(const std::vector<std::byte>& bytes)
 
 // For string-like types (convertible to string_view)
 template <typename S>
-    requires(!TriviallyCopyable<S> && std::convertible_to<S, std::string_view>)
-std::vector<std::byte> toBytes(const S& str)
+
+requires(!TriviallyCopyable<S> && std::convertible_to<S, std::string_view>)
+    std::vector<std::byte> toBytes(const S& str)
 {
     std::string_view view = str;
     std::vector<std::byte> bytes(view.size());
@@ -100,8 +101,9 @@ std::vector<std::byte> toBytes(const S& str)
 
 // For string-like types (constructible from string_view)
 template <typename R>
-    requires(!TriviallyCopyable<R> && std::constructible_from<R, std::string_view>)
-R fromBytes(const std::vector<std::byte>& bytes)
+
+requires(!TriviallyCopyable<R> && std::constructible_from<R, std::string_view>)
+    R fromBytes(const std::vector<std::byte>& bytes)
 {
     std::string_view view(reinterpret_cast<const char*>(bytes.data()), bytes.size());
     return R(view);
@@ -109,78 +111,61 @@ R fromBytes(const std::vector<std::byte>& bytes)
 
 // ================================================================================================
 
-// CRTP base
-template <typename Drv>
 class Messenger
 {
-protected:
-    void send(const Bytes& msg)
-    {
-        static_cast<Drv*>(this)->send_impl(msg);
-    }
+public:
+    Messenger(std::string_view address, bool is_server);
+    ~Messenger();
 
-    Bytes recv()
-    {
-        return static_cast<Drv*>(this)->recv_impl();
-    }
+public:
+    void send(const Bytes& msg) const;
+    Bytes recv() const;
+
+private:
+    class Impl;
+    std::unique_ptr<Impl> pImpl;
 };
 
 // ================================================================================================
 
-// CRTP derived
-class ReqClient : public Messenger<ReqClient>
+class ReqClient
 {
-    friend class Messenger<ReqClient>;
-
 public:
-    ReqClient(const std::string& address);
+    ReqClient(std::string_view address);
     ~ReqClient();
 
     template <Sendable S, Receivable R>
-    R sendAndRecv(const S& msg)
+    R sendAndRecv(const S& msg) const
     {
         auto req = toBytes(msg);
-        this->send(req);
-        auto rep = this->recv();
+        mMessenger.send(req);
+        auto rep = mMessenger.recv();
         return fromBytes<R>(rep);
     }
 
 private:
-    class Impl;
-    std::unique_ptr<Impl> mImpl;
-
-private:
-    void send_impl(const Bytes& msg);
-    Bytes recv_impl();
+    Messenger mMessenger;
 };
 
 // ================================================================================================
 
-// CRTP derived
-class RepServer : public Messenger<RepServer>
+class RepServer
 {
-    friend class Messenger<RepServer>;
-
 public:
-    RepServer(const std::string& address);
+    RepServer(std::string_view address);
     ~RepServer();
 
     template <Sendable S, Receivable R>
     R recvAndSend(const S& msg)
     {
-        auto req = this->recv();
+        auto req = mMessenger.recv();
         auto rep = toBytes(msg);
-        this->send(rep);
+        mMessenger.send(rep);
         return fromBytes<R>(req);
     }
 
 private:
-    class Impl;
-    std::unique_ptr<Impl> mImpl;
-
-private:
-    void send_impl(const Bytes& msg);
-    Bytes recv_impl();
+    Messenger mMessenger;
 };
 
 #endif  //!__GRAFFITO__H__

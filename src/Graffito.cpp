@@ -7,6 +7,8 @@
 
 #include "SparklingGraffito/Graffito.hpp"
 
+#include <memory>
+#include <string_view>
 #include <zmq.hpp>
 
 std::vector<std::byte> m2b(const zmq::message_t& msg)
@@ -16,13 +18,22 @@ std::vector<std::byte> m2b(const zmq::message_t& msg)
 }
 
 // ================================================================================================
-class ReqClient::Impl
+class Messenger::Impl
 {
 public:
-    Impl(const std::string& address)
-        : mAddr(address),mZCtx(1), mReq(mZCtx, ZMQ_REQ)
+    Impl(std::string_view address, bool is_server)
+        : mAddr(address), mZCtx(1)
     {
-        mReq.connect(address);
+        if (is_server)
+        {
+            mSocket = zmq::socket_t(mZCtx, ZMQ_REP);
+            mSocket.bind(mAddr);
+        }
+        else
+        {
+            mSocket = zmq::socket_t(mZCtx, ZMQ_REQ);
+            mSocket.connect(mAddr);
+        }
     }
 
     ~Impl() = default;
@@ -30,82 +41,53 @@ public:
     void send_impl(const Bytes& msg)
     {
         zmq::message_t req(msg.data(), msg.size());
-        mReq.send(req, zmq::send_flags::none);
+        mSocket.send(req, zmq::send_flags::none);
     }
 
     Bytes recv_impl()
     {
         zmq::message_t rep;
-        auto rr = mReq.recv(rep);
+        auto rr = mSocket.recv(rep);
         return m2b(rep);
     }
 
 private:
     std::string mAddr;
     zmq::context_t mZCtx;
-    zmq::socket_t mReq;
+    zmq::socket_t mSocket;
 };
 
-// ReqClient methods
-ReqClient::ReqClient(const std::string& server_address)
-    : mImpl(std::make_unique<Impl>(server_address)) {}
-
-ReqClient::~ReqClient() = default;
-
-void ReqClient::send_impl(const Bytes& msg)
+Messenger::Messenger(std::string_view addr, bool is_server)
 {
-    mImpl->send_impl(msg);
+    pImpl = std::make_unique<Impl>(addr, is_server);
 }
 
-Bytes ReqClient::recv_impl()
+Messenger::~Messenger() = default;
+
+void Messenger::send(const Bytes& msg) const
 {
-    return mImpl->recv_impl();
+    pImpl->send_impl(msg);
+}
+
+Bytes Messenger::recv() const
+{
+    return pImpl->recv_impl();
 }
 
 // ================================================================================================
 
-class RepServer::Impl
+ReqClient::ReqClient(std::string_view address)
+    : mMessenger(address, false)
 {
-public:
-    Impl(const std::string& address)
-        : mAddr(address), mZCtx(1), mRep(mZCtx, ZMQ_REP)
-    {
-        mRep.bind(address);
-    }
+}
 
-    ~Impl() = default;
+ReqClient::~ReqClient() = default;
 
-    void send_impl(Bytes msg)
-    {
-        zmq::message_t req(msg.data(), msg.size());
-        mRep.send(req, zmq::send_flags::none);
-    }
+// ================================================================================================
 
-    Bytes recv_impl()
-    {
-        zmq::message_t req;
-        auto rr = mRep.recv(req);
-        return m2b(req);
-    }
-
-private:
-    std::string mAddr;
-    zmq::context_t mZCtx;
-    zmq::socket_t mRep;
-};
-
-// RepServer methods
-RepServer::RepServer(const std::string& address)
-    : mImpl(std::make_unique<Impl>(address)) {}
+RepServer::RepServer(std::string_view address)
+    : mMessenger(address, true)
+{
+}
 
 RepServer::~RepServer() = default;
-
-void RepServer::send_impl(const Bytes& msg)
-{
-    mImpl->send_impl(msg);
-}
-
-Bytes RepServer::recv_impl()
-{
-    return mImpl->recv_impl();
-}
