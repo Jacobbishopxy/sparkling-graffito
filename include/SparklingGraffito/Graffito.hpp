@@ -8,8 +8,6 @@
 #ifndef __GRAFFITO__H__
 #define __GRAFFITO__H__
 
-#include <array>
-#include <bit>
 #include <cstring>
 #include <memory>
 #include <string_view>
@@ -24,7 +22,6 @@ using Bytes = std::vector<std::byte>;
 // Concept Definitions
 
 // clang-format off
-
 template <typename T>
 concept TriviallyCopyable =
     std::is_trivially_copyable_v<T> &&
@@ -35,7 +32,7 @@ template <typename S>
 concept Sendable =
     TriviallyCopyable<S> ||  // Supports trivially copyable types
     std::convertible_to<S, std::string_view> ||  // Supports string-like types
-    requires(const S& s) {  // Supports containers of bytes (e.g., std::vector<std::byte>)
+    requires(const S& s) {  // Supports containers of bytes
         { s.data() } -> std::convertible_to<const std::byte*>;
         { s.size() } -> std::convertible_to<size_t>;
     };
@@ -48,65 +45,64 @@ concept Receivable =
 
 // clang-format on
 
-// ================================================================================================
-
-template <TriviallyCopyable T>
-auto toBytesArr(const T& object)
+// Single toBytes function that handles all Sendable types
+template <Sendable S>
+Bytes toBytes(const S& source)
 {
-    static_assert(std::is_trivially_copyable_v<T>, "Type must be trivially copyable");
-
-    return std::bit_cast<std::array<std::byte, sizeof(T)>>(object);
-}
-
-template <TriviallyCopyable T>
-T fromBytesArr(const std::array<std::byte, sizeof(T)>& bytes)
-{
-    return std::bit_cast<T>(bytes);
-}
-
-// Convert object to vector of bytes
-template <TriviallyCopyable T>
-std::vector<std::byte> toBytes(const T& object)
-{
-    std::vector<std::byte> bytes(sizeof(T));
-    std::memcpy(bytes.data(), &object, sizeof(T));
-    return bytes;
-}
-
-// Convert vector of bytes back to object
-template <TriviallyCopyable T>
-T fromBytes(const std::vector<std::byte>& bytes)
-{
-    if (bytes.size() < sizeof(T))
+    if constexpr (TriviallyCopyable<S>)
     {
-        throw std::runtime_error("Insufficient bytes for type");
+        Bytes bytes(sizeof(S));
+        std::memcpy(bytes.data(), &source, sizeof(S));
+        return bytes;
     }
-
-    T object;
-    std::memcpy(&object, bytes.data(), sizeof(T));
-    return object;
+    else if constexpr (std::convertible_to<S, std::string_view>)
+    {
+        std::string_view view = source;
+        Bytes bytes(view.size());
+        std::memcpy(bytes.data(), view.data(), view.size());
+        return bytes;
+    }
+    else
+    {  // Byte container case
+        return Bytes(
+            reinterpret_cast<const std::byte*>(source.data()),
+            reinterpret_cast<const std::byte*>(source.data()) + source.size());
+    }
 }
 
-// For string-like types (convertible to string_view)
-template <typename S>
+template <typename>
+inline constexpr bool always_false = false;
 
-requires(!TriviallyCopyable<S> && std::convertible_to<S, std::string_view>)
-    std::vector<std::byte> toBytes(const S& str)
+// Single fromBytes function that handles all Receivable types
+template <Receivable R>
+R fromBytes(const Bytes& bytes)
 {
-    std::string_view view = str;
-    std::vector<std::byte> bytes(view.size());
-    std::memcpy(bytes.data(), view.data(), view.size());
-    return bytes;
-}
-
-// For string-like types (constructible from string_view)
-template <typename R>
-
-requires(!TriviallyCopyable<R> && std::constructible_from<R, std::string_view>)
-    R fromBytes(const std::vector<std::byte>& bytes)
-{
-    std::string_view view(reinterpret_cast<const char*>(bytes.data()), bytes.size());
-    return R(view);
+    if constexpr (TriviallyCopyable<R>)
+    {
+        if (bytes.size() < sizeof(R))
+        {
+            throw std::runtime_error("Insufficient bytes for type");
+        }
+        R result;
+        std::memcpy(&result, bytes.data(), sizeof(R));
+        return result;
+    }
+    else if constexpr (std::constructible_from<R, const char*, size_t>)
+    {
+        return R(
+            reinterpret_cast<const char*>(bytes.data()),
+            bytes.size());
+    }
+    else if constexpr (std::constructible_from<R, std::string_view>)
+    {
+        return R(std::string_view(
+            reinterpret_cast<const char*>(bytes.data()),
+            bytes.size()));
+    }
+    else
+    {
+        static_assert(always_false<R>, "Type is not Receivable");
+    }
 }
 
 // ================================================================================================
